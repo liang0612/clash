@@ -2,9 +2,11 @@ package tunnel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -251,15 +253,30 @@ func handleUDPConn(packet *inbound.PacketAdapter) {
 	}()
 }
 
+func getPort(add string) (string, error) {
+	if add == "" {
+		return "", errors.New("empty add")
+	}
+	items := strings.Split(add, ":")
+	if len(items) == 2 {
+		return items[1], nil
+	}
+	return "", errors.New("add format error")
+}
+
 func handleTCPConn(connCtx C.ConnContext) {
 	defer connCtx.Conn().Close()
 
 	metadata := connCtx.Metadata()
+	localAdd := connCtx.Conn().LocalAddr().String()
+	lport, err := getPort(localAdd)
+	if err == nil {
+		metadata.LocalPort = lport
+	}
 	if !metadata.Valid() {
 		log.Warnln("[Metadata] not valid: %#v", metadata)
 		return
 	}
-
 	if err := preHandleMetadata(metadata); err != nil {
 		log.Debugln("[Metadata PreHandle] error: %s", err)
 		return

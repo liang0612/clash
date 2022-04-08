@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/Dreamacro/clash/adapter"
@@ -97,8 +98,13 @@ type Config struct {
 	Users        []auth.AuthUser
 	Proxies      map[string]C.Proxy
 	Providers    map[string]providerTypes.ProxyProvider
+	Authes       map[string]AuthInfo
 }
-
+type AuthInfo struct {
+	Port     int
+	Username string
+	Password string
+}
 type RawDNS struct {
 	Enable            bool              `yaml:"enable"`
 	IPv6              bool              `yaml:"ipv6"`
@@ -146,6 +152,7 @@ type RawConfig struct {
 	Proxy         []map[string]interface{}          `yaml:"proxies"`
 	ProxyGroup    []map[string]interface{}          `yaml:"proxy-groups"`
 	Rule          []string                          `yaml:"rules"`
+	Authes        []map[string]interface{}          `yaml:"authes"`
 }
 
 // Parse config
@@ -170,6 +177,7 @@ func UnmarshalRawConfig(buf []byte) (*RawConfig, error) {
 		Rule:           []string{},
 		Proxy:          []map[string]interface{}{},
 		ProxyGroup:     []map[string]interface{}{},
+		Authes:         []map[string]interface{}{},
 		DNS: RawDNS{
 			Enable:      false,
 			UseHosts:    true,
@@ -208,6 +216,11 @@ func ParseRawConfig(rawCfg *RawConfig) (*Config, error) {
 	}
 	config.General = general
 
+	authes, err := parseAuthes(rawCfg)
+	if err != nil {
+		return nil, err
+	}
+	config.Authes = authes
 	proxies, providers, err := parseProxies(rawCfg)
 	if err != nil {
 		return nil, err
@@ -272,6 +285,27 @@ func parseGeneral(cfg *RawConfig) (*General, error) {
 	}, nil
 }
 
+func parseAuthes(cfg *RawConfig) (map[string]AuthInfo, error) {
+	authes := make(map[string]AuthInfo)
+	if cfg.Authes != nil {
+		for _, item := range cfg.Authes {
+			port, ok := item["port"]
+			user, ok1 := item["user"]
+			pass, ok2 := item["password"]
+			if ok && ok1 && ok2 {
+				key := fmt.Sprintf("%v", port)
+				p, _ := strconv.Atoi(key)
+				authes[key] = AuthInfo{
+					Port:     p,
+					Username: fmt.Sprintf("%v", user),
+					Password: fmt.Sprintf("%v", pass),
+				}
+			}
+
+		}
+	}
+	return authes, nil
+}
 func parseProxies(cfg *RawConfig) (proxies map[string]C.Proxy, providersMap map[string]providerTypes.ProxyProvider, err error) {
 	proxies = make(map[string]C.Proxy)
 	providersMap = make(map[string]providerTypes.ProxyProvider)

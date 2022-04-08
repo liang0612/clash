@@ -67,7 +67,7 @@ func ApplyConfig(cfg *config.Config, force bool) {
 	mux.Lock()
 	defer mux.Unlock()
 
-	updateUsers(cfg.Users)
+	updateUsers(cfg.Users, cfg.Authes)
 	updateProxies(cfg.Proxies, cfg.Providers)
 	updateRules(cfg.Rules)
 	updateHosts(cfg.Hosts)
@@ -185,8 +185,17 @@ func updateGeneral(general *config.General, force bool) {
 	P.ReCreateMixed(general.MixedPort, tcpIn, udpIn)
 }
 
-func updateUsers(users []auth.AuthUser) {
-	authenticator := auth.NewAuthenticator(users)
+func updateUsers(users []auth.AuthUser, authes map[string]config.AuthInfo) {
+	authesInfo := make(map[string]auth.AuthUser)
+	if authes != nil {
+		for k, v := range authes {
+			authesInfo[k] = auth.AuthUser{
+				User: v.Username,
+				Pass: v.Password,
+			}
+		}
+	}
+	authenticator := auth.NewAuthenticator(users, authesInfo)
 	authStore.SetAuthenticator(authenticator)
 	if authenticator != nil {
 		log.Infoln("Authentication of local server updated")

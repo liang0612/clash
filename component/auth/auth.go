@@ -1,11 +1,15 @@
 package auth
 
 import (
+	"strconv"
 	"sync"
 )
 
+var authInfos = make(map[string]AuthUser)
+
 type Authenticator interface {
 	Verify(user string, pass string) bool
+	VerifyPort(port int, user string, pass string) bool
 	Users() []string
 }
 
@@ -24,9 +28,19 @@ func (au *inMemoryAuthenticator) Verify(user string, pass string) bool {
 	return ok && realPass == pass
 }
 
+func (au *inMemoryAuthenticator) VerifyPort(port int, user string, pass string) bool {
+	if item, ok := authInfos[strconv.Itoa(port)]; ok {
+		return user == item.User && pass == item.Pass
+	} else {
+		return au.Verify(user, pass)
+	}
+	return false
+}
+
 func (au *inMemoryAuthenticator) Users() []string { return au.usernames }
 
-func NewAuthenticator(users []AuthUser) Authenticator {
+func NewAuthenticator(users []AuthUser, authes map[string]AuthUser) Authenticator {
+	authInfos = authes
 	if len(users) == 0 {
 		return nil
 	}

@@ -37,7 +37,9 @@ func HandleConn(c net.Conn, in chan<- C.ConnContext, cache *cache.Cache) {
 		var resp *http.Response
 
 		if !trusted {
-			resp = authenticate(request, cache)
+			addr := c.LocalAddr()
+			port := addr.(*net.TCPAddr).Port
+			resp = authenticate(request, cache, port)
 
 			trusted = resp == nil
 		}
@@ -93,7 +95,7 @@ func HandleConn(c net.Conn, in chan<- C.ConnContext, cache *cache.Cache) {
 	conn.Close()
 }
 
-func authenticate(request *http.Request, cache *cache.Cache) *http.Response {
+func authenticate(request *http.Request, cache *cache.Cache, localPort int) *http.Response {
 	authenticator := authStore.Authenticator()
 	if authenticator != nil {
 		credential := parseBasicProxyAuthorization(request)
@@ -106,7 +108,8 @@ func authenticate(request *http.Request, cache *cache.Cache) *http.Response {
 		var authed interface{}
 		if authed = cache.Get(credential); authed == nil {
 			user, pass, err := decodeBasicProxyAuthorization(credential)
-			authed = err == nil && authenticator.Verify(user, pass)
+			authed = err == nil && authenticator.VerifyPort(localPort, user, pass)
+
 			cache.Put(credential, authed, time.Minute)
 		}
 		if !authed.(bool) {

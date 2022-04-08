@@ -158,7 +158,8 @@ func ServerHandshake(rw net.Conn, authenticator auth.Authenticator) (addr Addr, 
 		pass := string(authBuf[:passLen])
 
 		// Verify
-		if ok := authenticator.Verify(string(user), string(pass)); !ok {
+		localPort := rw.LocalAddr().(*net.TCPAddr).Port
+		if ok := authenticator.VerifyPort(localPort, string(user), string(pass)); !ok {
 			rw.Write([]byte{1, 1})
 			err = ErrAuth
 			return

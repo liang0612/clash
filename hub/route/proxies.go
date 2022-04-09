@@ -2,7 +2,10 @@ package route
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/Dreamacro/clash/adapter/provider"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 	"time"
@@ -20,7 +23,7 @@ import (
 func proxyRouter() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", getProxies)
-
+	r.Post("/", addProxy)
 	r.Route("/{name}", func(r chi.Router) {
 		r.Use(parseProxyName, findProxyByName)
 		r.Get("/", getProxy)
@@ -28,6 +31,38 @@ func proxyRouter() http.Handler {
 		r.Put("/", updateProxy)
 	})
 	return r
+}
+
+func addProxy(writer http.ResponseWriter, request *http.Request) {
+	var req map[string]interface{}
+	body, _ := ioutil.ReadAll(request.Body)
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		render.Status(request, http.StatusBadRequest)
+		render.JSON(writer, request, ErrBadRequest)
+		return
+	}
+
+	proxy, err := adapter.ParseProxy(req)
+	if err != nil {
+		render.Status(request, http.StatusBadRequest)
+		render.JSON(writer, request, ErrBadRequest)
+		return
+	}
+	fmt.Println(proxy)
+	groupname := proxy.Name()
+	ps := []C.Proxy{}
+	ps = append(ps, proxy)
+	hc := provider.NewHealthCheck(ps, "", 0, true)
+	pd, _ := provider.NewCompatibleProvider(groupname, ps, hc)
+	providers := tunnel.Providers()
+	providers[groupname] = pd
+
+	proxies := tunnel.Proxies()
+	proxies[groupname] = proxy
+	tunnel.UpdateProxies(proxies, providers)
+	render.JSON(writer, request, render.M{
+		"data": true,
+	})
 }
 
 func parseProxyName(next http.Handler) http.Handler {

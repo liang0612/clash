@@ -27,7 +27,13 @@ func (au *inMemoryAuthenticator) Verify(user string, pass string) bool {
 	realPass, ok := au.storage.Load(user)
 	return ok && realPass == pass
 }
-
+func AddAuth(port int, user, pass string) {
+	item := AuthUser{
+		User: user,
+		Pass: user,
+	}
+	authInfos[strconv.Itoa(port)] = item
+}
 func (au *inMemoryAuthenticator) VerifyPort(port int, user string, pass string) bool {
 	if item, ok := authInfos[strconv.Itoa(port)]; ok {
 		return user == item.User && pass == item.Pass

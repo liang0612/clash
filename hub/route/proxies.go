@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Dreamacro/clash/adapter/provider"
+	rules2 "github.com/Dreamacro/clash/rule"
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Dreamacro/clash/adapter"
@@ -24,6 +26,7 @@ func proxyRouter() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", getProxies)
 	r.Post("/", addProxy)
+	r.Get("/stop/{name}", stopProxy)
 	r.Route("/{name}", func(r chi.Router) {
 		r.Use(parseProxyName, findProxyByName)
 		r.Get("/", getProxy)
@@ -31,6 +34,36 @@ func proxyRouter() http.Handler {
 		r.Put("/", updateProxy)
 	})
 	return r
+}
+
+func stopProxy(writer http.ResponseWriter, request *http.Request) {
+	name := getEscapeParam(request, "name")
+	name = strings.Trim(name, " ")
+	if len(name) == 0 {
+		render.Status(request, http.StatusBadRequest)
+		render.JSON(writer, request, ErrBadRequest)
+		return
+	}
+	proxies := tunnel.Proxies()
+	providers := tunnel.Providers()
+	delete(proxies, name)
+	delete(providers, name)
+
+	rules := tunnel.Rules()
+	var newRules []C.Rule
+	for _, item := range rules {
+		if adapter := item.Adapter(); adapter == name {
+			dis := item.(*rules2.ListenerPort)
+			if dis != nil {
+				dis.Dispose()
+			}
+			continue
+		}
+		newRules = append(newRules, item)
+	}
+
+	tunnel.UpdateProxies(proxies, providers)
+	tunnel.UpdateRules(newRules)
 }
 
 func addProxy(writer http.ResponseWriter, request *http.Request) {

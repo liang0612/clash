@@ -38,7 +38,7 @@ func (rt RuleType) String() string {
 	case Process:
 		return "Process"
 	case ListenerPort:
-		return "ListenerPort"
+		return "LISTENER-PORT"
 	case MATCH:
 		return "Match"
 	default:

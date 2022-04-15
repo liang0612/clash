@@ -2,6 +2,7 @@ package rules
 
 import (
 	"errors"
+	"fmt"
 	C "github.com/Dreamacro/clash/constant"
 	"github.com/Dreamacro/clash/listener/mixed"
 	"github.com/Dreamacro/clash/tunnel"
@@ -19,10 +20,7 @@ type ListenerPort struct {
 }
 
 func (p *ListenerPort) RuleType() C.RuleType {
-	if p.isSource {
-		return C.SrcPort
-	}
-	return C.DstPort
+	return C.ListenerPort
 }
 
 func (p *ListenerPort) Match(metadata *C.Metadata) bool {
@@ -42,6 +40,15 @@ func (p *ListenerPort) Payload() string {
 
 func (p *ListenerPort) ShouldResolveIP() bool {
 	return false
+}
+
+func (p *ListenerPort) Dispose() bool {
+	l := listenerMixPorts[p.port]
+	if l != nil {
+		l.Close()
+	}
+	delete(listenerMixPorts, p.port)
+	return true
 }
 
 func NewListenerPort(port string, adapter string) (*ListenerPort, error) {
@@ -66,5 +73,6 @@ func startListenerPort(port string) (bool, error) {
 		return false, err
 	}
 	listenerMixPorts[port] = mixedListener
+	fmt.Println("start new listener port:%s", port)
 	return true, nil
 }

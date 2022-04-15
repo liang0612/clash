@@ -3,9 +3,11 @@ package route
 import (
 	"encoding/json"
 	"github.com/Dreamacro/clash/adapter"
+	"github.com/Dreamacro/clash/adapter/outboundgroup"
 	"github.com/Dreamacro/clash/adapter/provider"
 	"github.com/Dreamacro/clash/component/auth"
 	C "github.com/Dreamacro/clash/constant"
+	providerTypes "github.com/Dreamacro/clash/constant/provider"
 	R "github.com/Dreamacro/clash/rule"
 	"github.com/Dreamacro/clash/tunnel"
 	"github.com/go-chi/chi/v5"
@@ -69,8 +71,8 @@ func startProxy(writer http.ResponseWriter, request *http.Request) {
 		})
 		return
 	}
-	ok, groupName := createProxy(req.Proxy.(map[string]interface{}))
-	if !ok {
+	groupName, err := createProxyV2(req.Proxy.(map[string]interface{}))
+	if err != nil {
 		render.JSON(writer, request, render.M{
 			"code": -1,
 			"msg":  "代理创建失败,请检查proxy参数",
@@ -98,22 +100,52 @@ func startProxy(writer http.ResponseWriter, request *http.Request) {
 }
 
 func createProxy(newProxy map[string]interface{}) (bool, string) {
+	createProxyV2(newProxy)
 	proxy, err := adapter.ParseProxy(newProxy)
 	if err != nil {
 		return false, ""
 	}
-	groupname := proxy.Name()
+	groupname := "clash-" + proxy.Name()
+
+	proxies := tunnel.Proxies()
+	proxies[groupname] = proxy
+
 	ps := []C.Proxy{}
 	ps = append(ps, proxy)
 	hc := provider.NewHealthCheck(ps, "", 0, true)
 	pd, _ := provider.NewCompatibleProvider(groupname, ps, hc)
 	providers := tunnel.Providers()
 	providers[groupname] = pd
-
-	proxies := tunnel.Proxies()
-	proxies[groupname] = proxy
-	tunnel.UpdateProxies(proxies, providers)
+	mapping := make(map[string]interface{})
+	mapping["name"] = groupname
+	mapping["type"] = "select"
+	/*proxyGrounp, err := provider.ParseProxyProvider(groupname, mapping)
+	tunnel.UpdateProxies(proxies, providers)*/
 	return true, groupname
+}
+
+func createProxyV2(newProxy map[string]interface{}) (string, error) {
+	proxy, err := adapter.ParseProxy(newProxy)
+	if err != nil {
+		return "", err
+	}
+	name := proxy.Name()
+	proxies := make(map[string]C.Proxy)
+	proxies[name] = proxy
+
+	providersMap := make(map[string]providerTypes.ProxyProvider)
+	mapping := make(map[string]interface{})
+	mapping["name"] = name
+	mapping["type"] = "select"
+	mapping["proxies"] = []string{name}
+	group, err := outboundgroup.ParseProxyGroup(mapping, proxies, providersMap)
+
+	newProxies := tunnel.Proxies()
+	newProviders := tunnel.Providers()
+	newProxies[name] = proxy
+	newProviders[name] = providersMap[name]
+	tunnel.UpdateProxies(newProxies, newProviders)
+	return group.Name(), nil
 }
 
 func createRules(ruleType, payload, target string, params []string) bool {
@@ -150,10 +182,10 @@ func getFreePort(port int) (int, error) {
 		return 0, err
 	}
 	l, err := net.ListenTCP("tcp", addr)
+	defer l.Close()
 	if err != nil {
 		return 0, err
 	}
-	defer l.Close()
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 func checkPortIsAction(port int) (bool, error) {
@@ -163,9 +195,10 @@ func checkPortIsAction(port int) (bool, error) {
 	if err != nil {
 		return true, err
 	}
-	_, err = net.ListenTCP("tcp", tcpAddress)
+	l, err := net.ListenTCP("tcp", tcpAddress)
 	if err != nil {
 		return true, err
 	}
+	defer l.Close()
 	return false, nil
 }

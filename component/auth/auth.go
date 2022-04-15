@@ -30,7 +30,7 @@ func (au *inMemoryAuthenticator) Verify(user string, pass string) bool {
 func AddAuth(port int, user, pass string) {
 	item := AuthUser{
 		User: user,
-		Pass: user,
+		Pass: pass,
 	}
 	authInfos[strconv.Itoa(port)] = item
 }
